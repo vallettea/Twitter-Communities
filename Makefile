@@ -10,3 +10,6 @@ start:
 
 graph:
 	sbt "project graph" "run-main net.babel.graph.GraphApp $(GRAPH_FILE)"
+
+clean-graph:
+	rm -fr /tmp/twitter_graph/
