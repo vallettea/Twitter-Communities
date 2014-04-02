@@ -20,6 +20,9 @@ import SprayJsonSupport._
 sealed trait Messages
 case class FetchUser(userName: String) extends Messages
 case class FetchUserTweets(userName: String) extends Messages
+case class FetchFriendIds(userId: Long) extends Messages
+case class UserTweets(tweets: List[Tweet]) extends Messages
+case class FriendIds(userId: Long, friendIds: List[Long]) extends Messages
 case class Authenticate(arg1: String, arg2: String, arg3: String, arg4: String) extends Messages
 
 sealed trait sourceState
@@ -35,44 +38,47 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] {
   import ExecutionContext.Implicits.global
   val twitterBaseUrl = "https://api.twitter.com"
 
+  def pipeline(token: String): HttpRequest => Future[HttpResponse] = {
+    (
+      addHeader("Authorization", s"Bearer $token")
+      ~> encode(Gzip)
+      ~> sendReceive
+      ~> decode(Deflate)
+    )
+  }
+
   startWith(Unauthenticated, NoData)
 
   when(Authenticated) {
 
-    case Event(FetchUser(userName), TokenData(token)) =>
-      println("Fetching " + userName)
-      val pipeline: HttpRequest => Future[TwitterUser] = (
-        addHeader("Authorization", s"Bearer $token")
-        ~> encode(Gzip)
-        ~> sendReceive
-        ~> decode(Deflate)
-        ~> unmarshal[TwitterUser]
-      )
+    case Event(FetchFriendIds(userId), TokenData(token)) =>
+      println("Fetching friend ids from " + userId.toString)
+      val response = pipeline(token) {
+        Get(s"$twitterBaseUrl/1.1/friends/ids.json?user_id=$userId&count=5000")
+      }
+      val users = Await.result(response, 5 seconds)
+      println(users.status)
+      val friendIds = users ~> unmarshal[Friends]
+      sender ! FriendIds(userId, friendIds.ids)
+      stay using TokenData(token)
 
-      val response = pipeline {
+    case Event(FetchUser(userName), TokenData(token)) =>
+      println("Fetching info from " + userName)
+      val response = pipeline(token) {
         Get(s"$twitterBaseUrl/1.1/users/lookup.json?screen_name=$userName")
       }
-
       val user = Await.result(response, 5 seconds)
-      println(user)
+      println(user.entity)
+      println(user ~> unmarshal[TwitterUser])
       stay using TokenData(token)
 
     case Event(FetchUserTweets(userName), TokenData(token)) =>
-      println("Fetching " + userName)
-      val pipeline: HttpRequest => Future[List[Tweet]] = (
-        addHeader("Authorization", s"Bearer $token")
-        ~> encode(Gzip)
-        ~> sendReceive
-        ~> decode(Deflate)
-        ~> unmarshal[List[Tweet]]
-      )
-
-      val response = pipeline {
+      println("Fetching tweets from " + userName)
+      val response = pipeline(token) {
         Get(s"$twitterBaseUrl/1.1/statuses/user_timeline.json?screen_name=$userName&count=50&include_rts=true&exclude_replies=true")
       }
-
-      val tweets = Await.result(response, 5 seconds)
-      println(tweets.head)
+      val tweets = Await.result(response, 5 seconds) ~> unmarshal[List[Tweet]]
+      sender ! UserTweets(tweets)
 
       stay using TokenData(token)
   }
@@ -93,7 +99,7 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] {
       val response = pipeline {
         Post(s"$twitterBaseUrl/oauth2/token", FormData(Map("grant_type" -> "client_credentials")))
       }
-      val token = Await.result(response, 5 seconds).access_token
+      val token = Await.result(response, 10 seconds).access_token
 
       println("Moving to Authenticated.")
       goto(Authenticated) using TokenData(token)

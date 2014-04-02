@@ -24,9 +24,12 @@ case class Tweet(
   text: Option[String],
   created_at: Option[String])
 
+case class Friends(ids: List[Long])
+
 object TwitterJsonProtocol extends DefaultJsonProtocol {
   implicit val TwitterTokenFormat = jsonFormat2(TwitterToken)
   implicit val TwitterUserFormat = jsonFormat11(TwitterUser)
   implicit val TweetFormat = jsonFormat4(Tweet)
+  implicit val FriendsFormat = jsonFormat1(Friends)
 }
 

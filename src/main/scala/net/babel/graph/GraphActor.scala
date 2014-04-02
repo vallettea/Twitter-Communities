@@ -23,7 +23,6 @@ import akka.util.Timeout
  * Copyright (c) 2014 Snips. All rights reserved.
  */
 
-case class PersistUsers(users: List[String])
 case class GetUsers(usersIds: List[String])
 
 class GraphActor extends Actor with ActorLogging {
@@ -40,13 +39,13 @@ class GraphActor extends Actor with ActorLogging {
 
   def receive = {
 
-    case PersistUsers(users) => insertUsers(users)
+    case FriendIds(userId, friendIds) => insertUsers(userId, friendIds)
     case GetUsers(usersIds) => sender ! getUsers(usersIds)
 
   }
 
-  def insertUsers(users: List[String])(implicit graph: TitanGraph) {
-    println
+  def insertUsers(userId: Long, friendIds: List[Long])(implicit graph: TitanGraph) {
+    println(s"linking $userId to ${friendIds.toList}")
   }
 
   def getUsers(usersIds: List[String])(implicit graph: TitanGraph) = {
