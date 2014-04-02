@@ -43,8 +43,8 @@ object SampleClient extends App {
         }
       }
       case FriendIds(userId, friendIds) => {
-        println("receive")
         graphActor ! FriendIds(userId, friendIds)
+        friendIds.foreach(id => { twitterSource ! FetchFriendIds(id) })
       }
 
     }

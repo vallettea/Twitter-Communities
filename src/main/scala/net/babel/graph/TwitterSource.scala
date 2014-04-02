@@ -3,7 +3,7 @@ package net.babel.graph
 import net.babel.model._
 import net.babel.model.TwitterJsonProtocol._
 
-import akka.actor.{ ActorRef, Actor, Props, ActorSystem, FSM }
+import akka.actor.{ ActorRef, Actor, Props, ActorSystem, FSM, Stash }
 import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.{ Future, future, ExecutionContext, Await }
@@ -27,13 +27,14 @@ case class Authenticate(arg1: String, arg2: String, arg3: String, arg4: String) 
 
 sealed trait sourceState
 case object Authenticated extends sourceState
+case object Waiting extends sourceState
 case object Unauthenticated extends sourceState
 
 sealed trait ClientData
 case object NoData extends ClientData
 case class TokenData(token: String) extends ClientData
 
-class TwitterSource extends Actor with FSM[sourceState, ClientData] {
+class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
 
   import ExecutionContext.Implicits.global
   val twitterBaseUrl = "https://api.twitter.com"
@@ -49,6 +50,17 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] {
 
   startWith(Unauthenticated, NoData)
 
+  when(Waiting, stateTimeout = 16 minutes) {
+
+    case Event(FetchFriendIds(userId), TokenData(token)) =>
+      stash()
+      stay using TokenData(token)
+    case Event(StateTimeout, TokenData(token)) => {
+      unstashAll()
+      goto(Authenticated) using TokenData(token)
+    }
+  }
+
   when(Authenticated) {
 
     case Event(FetchFriendIds(userId), TokenData(token)) =>
@@ -57,10 +69,17 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] {
         Get(s"$twitterBaseUrl/1.1/friends/ids.json?user_id=$userId&count=5000")
       }
       val users = Await.result(response, 5 seconds)
-      println(users.status)
       val friendIds = users ~> unmarshal[Friends]
       sender ! FriendIds(userId, friendIds.ids)
-      stay using TokenData(token)
+
+      // checking the status
+      val headers = users.headers.map(x => (x.name, x.value)).toMap
+      if (headers("x-rate-limit-remaining") == "0") {
+        println("Quota reached moving to idle.")
+        goto(Waiting) using TokenData(token)
+      } else {
+        stay using TokenData(token)
+      }
 
     case Event(FetchUser(userName), TokenData(token)) =>
       println("Fetching info from " + userName)

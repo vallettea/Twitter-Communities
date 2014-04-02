@@ -45,7 +45,7 @@ class GraphActor extends Actor with ActorLogging {
   }
 
   def insertUsers(userId: Long, friendIds: List[Long])(implicit graph: TitanGraph) {
-    println(s"linking $userId to ${friendIds.toList}")
+    println(s"linking $userId to ${friendIds.size} people")
   }
 
   def getUsers(usersIds: List[String])(implicit graph: TitanGraph) = {
