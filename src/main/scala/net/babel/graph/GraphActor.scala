@@ -5,16 +5,13 @@ import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.{ Publish, Subscribe }
-import com.thinkaurelius.titan.core.{ TitanFactory, TitanGraph }
-import com.thinkaurelius.titan.core.attribute.Geoshape
-import com.tinkerpop.blueprints.{ Vertex => TinkerpopVertex }
 
 import scala.util.{ Failure, Success }
 import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.concurrent.duration._
 import akka.pattern.ask
 import akka.util.Timeout
-import com.thinkaurelius.titan.core.{ TitanGraph, TitanVertex, TitanEdge, TitanException }
+import com.thinkaurelius.titan.core.{ TitanGraph, TitanFactory, TitanVertex, TitanEdge, TitanException }
 import com.tinkerpop.blueprints.{ Direction, Vertex => BluePrintVertex, Edge => BluePrintEdge }
 import scala.collection.JavaConversions._
 /**
@@ -26,6 +23,8 @@ import scala.collection.JavaConversions._
  */
 
 case class GetUsers(usersIds: List[String])
+case object FetchAllGraph
+case class GraphAnswerMap(data: Map[_, _])
 
 class GraphActor extends Actor with ActorLogging {
 
@@ -35,14 +34,15 @@ class GraphActor extends Actor with ActorLogging {
 
   implicit val graph = TitanFactory.open(conf).asInstanceOf[TitanGraph]
   try {
-    graph.makeKey("uid").dataType(classOf[Long]).indexed(classOf[TinkerpopVertex]).unique().make()
+    graph.makeKey("uid").dataType(classOf[Long]).indexed(classOf[BluePrintVertex]).unique().make()
     graph.commit()
-  } catch { case e: Exception => println("Unable to create index (graph not empty).")}
+  } catch { case e: Exception => println("Unable to create index (graph not empty).") }
 
   def receive = {
 
     case FriendIds(userId, friendIds) => insertUsers(userId, friendIds)
     case GetUsers(usersIds) => sender ! getUsers(usersIds)
+    case FetchAllGraph => sender ! GraphAnswerMap(Map("vertices" -> getAllVertices, "edges" -> getAllEdges))
 
   }
 
@@ -78,6 +78,15 @@ class GraphActor extends Actor with ActorLogging {
       val friendVertex = fetchOrAddNode(friendId)
       fetchOrAddEdge(userVertex, friendVertex)
     })
+  }
+
+  def getAllVertices: List[Long] = {
+    graph.query.vertices.toList.map(vertex => vertex.getProperty[String]("uid").toLong)
+  }
+
+  def getAllEdges: List[(Long, Long)] = {
+    graph.query.edges.toList
+      .map(edge => (edge.getVertex(Direction.OUT).getProperty[String]("uid").toLong, edge.getVertex(Direction.IN).getProperty[String]("uid").toLong))
   }
 
   def getUsers(usersIds: List[String])(implicit graph: TitanGraph) = {

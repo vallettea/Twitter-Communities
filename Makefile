@@ -13,3 +13,6 @@ graph:
 
 clean-graph:
 	rm -fr /tmp/twitter_graph/
+
+api:
+	sbt "project graph" "run-main net.babel.api.Api"

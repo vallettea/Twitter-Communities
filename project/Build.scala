@@ -54,7 +54,9 @@ object GraphBuild extends Build {
       javaOptions += "-Xmx5G"
     )
 
-  lazy val graph = Project(id="graph", base=file("."), settings=sharedSettings).settings(
+  lazy val jerksonRand = RootProject(uri("https://github.com/randhindi/jerkson.git"))
+
+  lazy val graph = Project(id="graph", base=file("."), settings=sharedSettings).dependsOn(jerksonRand).settings(
     mainClass in (Compile, run) := Some("net.babel.graph.SampleClient")
   )
 }
