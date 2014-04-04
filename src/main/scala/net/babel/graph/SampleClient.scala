@@ -4,6 +4,7 @@ import net.babel.model._
 import akka.actor.{ ActorRef, Actor, Props, ActorSystem, FSM }
 import akka.pattern.ask
 import akka.util.Timeout
+import akka.routing.{ RoundRobinRouter }
 import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.concurrent.duration._
 import scala.io.Source
@@ -16,10 +17,16 @@ object SampleClient extends App {
   // creating actors
   val system = ActorSystem("SampleClient")
   val monitor = system.actorOf(Props(classOf[Monitor]), name = "monitor")
-  val twitterSource = system.actorOf(Props(classOf[TwitterSource]), name = "twitterSource")
   val graphActor = system.actorOf(Props(classOf[GraphActor]), name = "graphActor")
 
-  twitterSource ! Authenticate(lines(0), lines(1), lines(2), lines(3))
+  val routees = lines.map { line =>
+    val tt = system.actorOf(Props(classOf[TwitterSource]), name = ("twitterSource_" + line))
+    tt ! Authenticate(line.split(":")(0), line.split(":")(1))
+    tt
+  }
+
+  val routerProps = Props.empty.withRouter(RoundRobinRouter(routees = routees))
+  val twitterSource = system.actorOf(routerProps)
 
   // initial roots
   val roots = List("vallettea", "davidbruant")

@@ -23,7 +23,7 @@ case class FetchUserTweets(userName: String) extends Messages
 case class FetchFriendIds(userId: Long) extends Messages
 case class UserTweets(tweets: List[Tweet]) extends Messages
 case class FriendIds(userId: Long, friendIds: List[Long]) extends Messages
-case class Authenticate(arg1: String, arg2: String, arg3: String, arg4: String) extends Messages
+case class Authenticate(arg1: String, arg2: String) extends Messages
 
 sealed trait sourceState
 case object Authenticated extends sourceState
@@ -53,10 +53,10 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
   when(Waiting, stateTimeout = 16 minutes) {
 
     case Event(FetchFriendIds(userId), TokenData(token)) =>
-      stash()
+      stash
       stay using TokenData(token)
     case Event(StateTimeout, TokenData(token)) => {
-      unstashAll()
+      unstashAll
       goto(Authenticated) using TokenData(token)
     }
   }
@@ -104,7 +104,7 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
 
   when(Unauthenticated) {
 
-    case Event(Authenticate(consumerKey, consumerSecret, arg3, arg4), NoData) =>
+    case Event(Authenticate(consumerKey, consumerSecret), NoData) =>
 
       val credentials = Base64.encodeBase64String(s"$consumerKey:$consumerSecret".getBytes())
 
@@ -121,7 +121,12 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
       val token = Await.result(response, 10 seconds).access_token
 
       println("Moving to Authenticated.")
+      unstashAll
       goto(Authenticated) using TokenData(token)
+
+    case _ =>
+      stash
+      stay using NoData
   }
 
 }
