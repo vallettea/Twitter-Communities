@@ -14,6 +14,7 @@ import akka.util.Timeout
 import com.thinkaurelius.titan.core.{ TitanGraph, TitanFactory, TitanVertex, TitanEdge, TitanException }
 import com.tinkerpop.blueprints.{ Direction, Vertex => BluePrintVertex, Edge => BluePrintEdge }
 import scala.collection.JavaConversions._
+import java.lang.{ Integer => JInteger, Long => JLong, Double => JDouble }
 /**
  * GraphTwitter
  * contextual
@@ -34,7 +35,7 @@ class GraphActor extends Actor with ActorLogging {
 
   implicit val graph = TitanFactory.open(conf).asInstanceOf[TitanGraph]
   try {
-    graph.makeKey("uid").dataType(classOf[Long]).indexed(classOf[BluePrintVertex]).unique().make()
+    graph.makeKey("uid").dataType(classOf[JLong]).indexed(classOf[BluePrintVertex]).unique().make()
     graph.commit()
   } catch { case e: Exception => println("Unable to create index (graph not empty).") }
 

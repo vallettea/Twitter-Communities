@@ -26,10 +26,15 @@ case class Tweet(
 
 case class Friends(ids: List[Long])
 
+case class FriendList(
+  users: List[TwitterUser],
+  next_cursor: Long)
+
 object TwitterJsonProtocol extends DefaultJsonProtocol {
   implicit val TwitterTokenFormat = jsonFormat2(TwitterToken)
   implicit val TwitterUserFormat = jsonFormat11(TwitterUser)
   implicit val TweetFormat = jsonFormat4(Tweet)
   implicit val FriendsFormat = jsonFormat1(Friends)
+  implicit val FriendListFormat = jsonFormat2(FriendList)
 }
 

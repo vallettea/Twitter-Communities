@@ -21,9 +21,10 @@ sealed trait Messages
 case class FetchUser(userName: String) extends Messages
 case class FetchUserTweets(userName: String) extends Messages
 case class FetchFriendIds(userId: Long) extends Messages
+case class FetchFriends(user: String, cursor: Option[Long]) extends Messages
 case class UserTweets(tweets: List[Tweet]) extends Messages
 case class FriendIds(userId: Long, friendIds: List[Long]) extends Messages
-case class Authenticate(arg1: String, arg2: String, arg3: String, arg4: String) extends Messages
+case class Authenticate(consumerKey: String, consumerSecret: String) extends Messages
 
 sealed trait sourceState
 case object Authenticated extends sourceState
@@ -50,7 +51,7 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
 
   startWith(Unauthenticated, NoData)
 
-  when(Waiting, stateTimeout = 16 minutes) {
+  when(Waiting, stateTimeout = 909 seconds) {
 
     case Event(FetchFriendIds(userId), TokenData(token)) =>
       stash()
@@ -71,6 +72,24 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
       val users = Await.result(response, 5 seconds)
       val friendIds = users ~> unmarshal[Friends]
       sender ! FriendIds(userId, friendIds.ids)
+
+      // checking the status
+      val headers = users.headers.map(x => (x.name, x.value)).toMap
+      if (headers("x-rate-limit-remaining") == "0") {
+        println("Quota reached moving to idle.")
+        goto(Waiting) using TokenData(token)
+      } else {
+        stay using TokenData(token)
+      }
+
+    case Event(FetchFriends(user, cursor), TokenData(token)) =>
+      println("Fetching friend from " + user)
+      val response = pipeline(token) {
+        Get(s"$twitterBaseUrl/1.1/friends/list.json?screen_name=$user&count=200" + cursor.map("&cursor=" + _).getOrElse(""))
+      }
+      val users = Await.result(response, 5 seconds)
+      val friends = users ~> unmarshal[FriendList]
+      sender ! friends
 
       // checking the status
       val headers = users.headers.map(x => (x.name, x.value)).toMap
@@ -104,7 +123,7 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
 
   when(Unauthenticated) {
 
-    case Event(Authenticate(consumerKey, consumerSecret, arg3, arg4), NoData) =>
+    case Event(Authenticate(consumerKey, consumerSecret), NoData) =>
 
       val credentials = Base64.encodeBase64String(s"$consumerKey:$consumerSecret".getBytes())
 
@@ -121,7 +140,12 @@ class TwitterSource extends Actor with FSM[sourceState, ClientData] with Stash {
       val token = Await.result(response, 10 seconds).access_token
 
       println("Moving to Authenticated.")
+      unstashAll()
       goto(Authenticated) using TokenData(token)
+
+    case Event(_, NoData) =>
+      stash()
+      stay using NoData
   }
 
 }
