@@ -14,6 +14,7 @@ import akka.util.Timeout
 import com.thinkaurelius.titan.core.{ TitanGraph, TitanFactory, TitanVertex, TitanEdge, TitanException }
 import com.tinkerpop.blueprints.{ Direction, Vertex => BluePrintVertex, Edge => BluePrintEdge }
 import scala.collection.JavaConversions._
+import java.lang.{ Long => JLong, Double => JDouble }
 /**
  * GraphTwitter
  * contextual
@@ -34,7 +35,7 @@ class GraphActor extends Actor with ActorLogging {
 
   implicit val graph = TitanFactory.open(conf).asInstanceOf[TitanGraph]
   try {
-    graph.makeKey("uid").dataType(classOf[Long]).indexed(classOf[BluePrintVertex]).unique().make()
+    graph.makeKey("uid").dataType(classOf[JLong]).indexed(classOf[BluePrintVertex]).unique().make()
     graph.commit()
   } catch { case e: Exception => println("Unable to create index (graph not empty).") }
 
@@ -60,15 +61,15 @@ class GraphActor extends Actor with ActorLogging {
 
   def fetchOrAddEdge(fromVertex: TitanVertex, toVertex: TitanVertex): TitanEdge = {
     // a map: outVertex => Edge
-    val outVertices = fromVertex.getEdges(Direction.OUT).toList.asInstanceOf[List[TitanEdge]]
-      .map(edge => (edge.getVertex(Direction.OUT).asInstanceOf[TitanVertex], edge)).toMap
-    if (outVertices.keySet contains toVertex) {
-      outVertices(toVertex)
-    } else {
-      val edge = graph.addEdge(null, fromVertex, toVertex, "follows")
-      graph.commit
-      edge.asInstanceOf[TitanEdge]
-    }
+    // val outVertices = fromVertex.getEdges(Direction.OUT).toList.asInstanceOf[List[TitanEdge]]
+    //   .map(edge => (edge.getVertex(Direction.OUT).asInstanceOf[TitanVertex], edge)).toMap
+    // if (outVertices.keySet contains toVertex) {
+    //   outVertices(toVertex)
+    // } else {
+    val edge = graph.addEdge(null, fromVertex, toVertex, "follows")
+    graph.commit
+    edge.asInstanceOf[TitanEdge]
+    // }
   }
 
   def insertUsers(userId: Long, friendIds: List[Long])(implicit graph: TitanGraph) {
